@@ -3,11 +3,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-import torchvision.models as models
-import torchvision.utils as utils
 import config as settings
+from metadrive.component.sensors.rgb_camera import RGBCamera
 from metadrive.envs.metadrive_env import MetaDriveEnv
 from model import DrivingModel, get_device
 
@@ -22,13 +19,25 @@ env = MetaDriveEnv(
         out_of_road_done=settings.end_when_out_of_road,
         crash_vehicle_done=settings.end_when_vehicle_crashes,
         crash_object_done=settings.end_when_object_crashes,
+        use_render=settings.show_driving_window,
+        image_observation=True,
+        norm_pixel=True,
+        stack_size=1,
+        sensors=dict(
+            rgb_camera=(RGBCamera, 112, 112),
+        ),
+        vehicle_config=dict(
+            image_source="rgb_camera",
+        ),
     )
 )
 
 def convert_image(image):
-    image_tensor = torch.tensor(image, dtype=torch.float32)
-    image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0)
-    return image_tensor  # (1, 3, 112, 112)
+    image_tensor = torch.tensor(np.array(image), dtype=torch.float32)
+    if image_tensor.ndim == 4:          # (N, H, W, C)
+        return image_tensor.permute(0, 3, 1, 2)  # (N, C, H, W)
+    # single image (H, W, C)
+    return image_tensor.permute(2, 0, 1).unsqueeze(0)  # (1, C, H, W)
 
 device = get_device()
 model = DrivingModel().to(device)
@@ -49,7 +58,8 @@ env.render()
 def update():
     global state
 
-    image_tensor = convert_image(state)
+    frame = state["image"][..., -1]  # (112, 112, 3)
+    image_tensor = convert_image(frame)
 
     with torch.no_grad():
         predicted_action = model(image_tensor)
@@ -58,7 +68,7 @@ def update():
     env.render()
 
     if terminated or truncated:
-        state = env.reset()
+        state, information = env.reset()
         env.render()
     else:
         state = next_state

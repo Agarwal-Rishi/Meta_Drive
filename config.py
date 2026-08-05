@@ -45,8 +45,8 @@ show_driving_window = True
 
 learning_rate = 0.001
 batch_size = 64
-number_of_training_epochs = 30
+epochs = 30
 validation_fraction = 0.20
 random_seed = 42
 
-data_collection_steps = 5000
+data_collection_steps = 1000

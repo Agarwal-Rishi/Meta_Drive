@@ -6,13 +6,16 @@ from metadrive.component.sensors.rgb_camera import RGBCamera
 from metadrive.envs.metadrive_env import MetaDriveEnv
 from torch.utils.data import TensorDataset, DataLoader
 
+
 def get_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def convert_image(image):
-    image_tensor = torch.tensor(image, dtype=torch.float32)
-    image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0)
-    return image_tensor  # (1, 3, 112, 112)
+    image_tensor = torch.tensor(numpy.array(image), dtype=torch.float32)
+    if image_tensor.ndim == 4:          # (N, H, W, C)
+        return image_tensor.permute(0, 3, 1, 2)  # (N, C, H, W)
+    # single image (H, W, C)
+    return image_tensor.permute(2, 0, 1).unsqueeze(0)  # (1, C, H, W)
 
 class model(nn.Module):
     def __init__(self):
@@ -47,23 +50,40 @@ model.to(get_device())
 
 if __name__ == "__main__":
     device = get_device()
+
     env = MetaDriveEnv(
         dict(
-            map=settings.number_of_road_blocks,
-            start_seed=settings.start_seed,
-            num_scenarios=settings.number_of_scenarios,
-            traffic_density=settings.traffic_density,
-            random_spawn_lane_index=settings.random_starting_lane,
-            out_of_road_done=settings.end_when_out_of_road,
-            crash_vehicle_done=settings.end_when_vehicle_crashes,
-            crash_object_done=settings.end_when_object_crashes,
-            horizon=settings.maximum_episode_steps,
-            use_render=settings.show_collection_window,
-            manual_control=settings.use_manual_control,
-            controller=settings.manual_controller,
+            map=3,
+            start_seed=0,
+            num_scenarios=1,
+            traffic_density=0.0,
+            random_spawn_lane_index=False,
+
+            out_of_road_done=True,
+            crash_vehicle_done=True,
+            crash_object_done=True,
+            horizon=2000,
+
+            use_render=True,
+            manual_control=True,
+            controller="keyboard",
+            use_AI_protector=False,
+
             image_observation=True,
-            sensors=dict(rgb_camera=(RGBCamera, 112, 112)),
-            vehicle_config=dict(image_source="rgb_camera"),
+            norm_pixel=True,
+            stack_size=1,
+
+            sensors=dict(
+                rgb_camera=(
+                    RGBCamera,
+                    112,
+                    112,
+                ),
+            ),
+
+            vehicle_config=dict(
+                image_source="rgb_camera",
+            ),
         )
     )
 
@@ -72,47 +92,26 @@ if __name__ == "__main__":
 
     current_image = env.reset()
     env.render()
-    key_handler = key.KeyStateHandler()
-    env.unwrapped.window.push_handlers(key_handler)
     recorded_steps = 0
 
-    def update(dt):
-        global current_image, recorded_steps
+    while recorded_steps < settings.data_collection_steps:
+        # MetaDrive keyboard overrides this; you don't read keys yourself
+        next_image, reward, terminated, truncated, info = env.step([0.0, 0.0])
+        env.render()
 
-        steering = 0.0
-        throttle = 0.0
-
-        if key_handler[key.UP]:
-            throttle = 1.0
-        if key_handler[key.DOWN]:
-            throttle = -1.0
-        if key_handler[key.LEFT]:
-            steering = -1.0
-        if key_handler[key.RIGHT]:
-            steering = 1.0
-
-        current_action = [steering, throttle]
-
-        next_image, reward, terminated, truncated, info = env.step(current_action)
-
-        images.append(next_image)
+        current_action = [env.agent.steering, env.agent.throttle_brake]
+        frame = next_image["image"][..., -1]  # (112, 112, 3)
+        images.append(frame)
         actions.append(current_action)
-
         recorded_steps += 1
 
         if terminated or truncated:
-            env.reset()
+            current_image = env.reset()
+            env.render()
         else:
             current_image = next_image
-        env.render()
 
-        if recorded_steps >= settings.data_collection_steps:
-            env.close()
-
-    pyglet.clock.schedule_interval(
-        update,
-        1.0 / env.unwrapped.frame_rate,
-    )
+    env.close()
 
     # initialize the train val test splits
     image_train_end = int(0.75 * len(images))
@@ -124,7 +123,7 @@ if __name__ == "__main__":
 
     train_images = convert_image(images[:image_train_end])
     train_actions = torch.tensor(
-        actions[:train_end],
+        actions[:action_train_end],
         dtype=torch.float32,
     )
     val_images = convert_image(images[image_train_end:image_val_end])
