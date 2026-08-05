@@ -93,14 +93,14 @@ if __name__ == "__main__":
 
         current_action = [steering, throttle]
 
-        next_image, reward, done, info = env.step(current_action)
+        next_image, reward, terminated, truncated, info = env.step(current_action)
 
         images.append(next_image)
         actions.append(current_action)
 
         recorded_steps += 1
 
-        if done:
+        if terminated or truncated:
             env.reset()
         else:
             current_image = next_image
@@ -179,13 +179,14 @@ if __name__ == "__main__":
             loss = criterion(outputs, actions)
             print(f"Test Loss: {loss.item()}")
 
-    model.save(settings.model_path)
-    print(f"Model saved to {settings.model_path}")
+settings.model_folder.mkdir(parents=True, exist_ok=True)
 
-    model.load(settings.model_path)
-    print(f"Model loaded from {settings.model_path}")
+torch.save(
+    model.state_dict(),
+    settings.model_file,
+)
 
-    model.eval()
-    with torch.no_grad():
-        for images, actions in test_loader:
-            images = images.to(device)
+print(f"Model saved to {settings.model_file}")
+
+
+

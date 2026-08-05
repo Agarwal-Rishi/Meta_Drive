@@ -7,6 +7,9 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torchvision.utils as utils
+import config as settings
+from metadrive.envs.metadrive_env import MetaDriveEnv
+from model import DrivingModel, get_device
 
 
 env = MetaDriveEnv(
@@ -28,15 +31,22 @@ def convert_image(image):
     return image_tensor  # (1, 3, 112, 112)
 
 device = get_device()
-model = model()
-model.to(device)
+model = DrivingModel().to(device)
+
+saved_weights = torch.load(
+    settings.model_file,
+    map_location=device,
+    weights_only=True,
+)
+
+model.load_state_dict(saved_weights)
 
 model.eval()
 
-state = env.reset()
+state, information = env.reset()
 env.render()
 
-def update(dt):
+def update():
     global state
 
     image_tensor = convert_image(state)
@@ -44,17 +54,17 @@ def update(dt):
     with torch.no_grad():
         predicted_action = model(image_tensor)
     action = predicted_action.squeeze(0).cpu().numpy()
-    next_state, reward, done, info = env.step(action)
+    next_state, reward, terminated, truncated, info = env.step(action)
     env.render()
 
-    if done:
+    if terminated or truncated:
         state = env.reset()
         env.render()
     else:
         state = next_state
 
-pyglet.clock.schedule_interval(update, 1.0 / env.unwrapped.frame_rate)
-try:    
-    pyglet.app.run()
+try:
+    while True:
+        update()
 finally:
     env.close()
