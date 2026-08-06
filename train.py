@@ -39,7 +39,6 @@ class model(nn.Module):
 
             nn.Flatten(),
             nn.Linear(256 * 7 * 7, 2),
-            nn.Tanh(),
         )
 
     def forward(self, x):
@@ -145,7 +144,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset, batch_size=settings.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=settings.batch_size, shuffle=False)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=settings.learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=settings.learning_rate, weight_decay=0.0005)
     criterion = nn.MSELoss()
 
     for epoch in range(settings.epochs):

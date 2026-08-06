@@ -64,6 +64,7 @@ def update():
     with torch.no_grad():
         predicted_action = model(image_tensor)
     action = predicted_action.squeeze(0).cpu().numpy()
+    action = np.clip(action, -1.0, 1.0)
     next_state, reward, terminated, truncated, info = env.step(action)
     env.render()
 

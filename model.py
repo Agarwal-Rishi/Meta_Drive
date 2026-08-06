@@ -29,7 +29,6 @@ class DrivingModel(nn.Module):
 
             nn.Flatten(),
             nn.Linear(256 * 7 * 7, 2),
-            nn.Tanh(),
         )
 
     def forward(self, x):
