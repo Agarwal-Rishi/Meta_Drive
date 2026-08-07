@@ -4,6 +4,7 @@ import config as settings
 import torch.nn as nn
 from metadrive.component.sensors.rgb_camera import RGBCamera
 from metadrive.envs.metadrive_env import MetaDriveEnv
+from metadrive.policy.expert_policy import ExpertPolicy
 from torch.utils.data import TensorDataset, DataLoader
 
 
@@ -53,33 +54,30 @@ if __name__ == "__main__":
     env = MetaDriveEnv(
         dict(
             map=3,
-            start_seed=0,
+            start_seed=42,
             num_scenarios=1,
             traffic_density=0.0,
+            need_inverse_traffic=False,
             random_spawn_lane_index=False,
-
+            map_config=dict(
+                type="block_sequence",
+                config="CCCC",
+                lane_num=2,
+                lane_width=3.5,
+            ),
             out_of_road_done=True,
             crash_vehicle_done=True,
             crash_object_done=True,
             horizon=2000,
-
             use_render=True,
-            manual_control=True,
-            controller="keyboard",
-            use_AI_protector=False,
-
+            manual_control=False,
+            agent_policy=ExpertPolicy,
             image_observation=True,
             norm_pixel=True,
             stack_size=1,
-
             sensors=dict(
-                rgb_camera=(
-                    RGBCamera,
-                    112,
-                    112,
-                ),
+                rgb_camera=(RGBCamera, 112, 112),
             ),
-
             vehicle_config=dict(
                 image_source="rgb_camera",
             ),
@@ -94,7 +92,7 @@ if __name__ == "__main__":
     recorded_steps = 0
 
     while recorded_steps < settings.data_collection_steps:
-        # MetaDrive keyboard overrides this; you don't read keys yourself
+        # ExpertPolicy drives; dummy step action is ignored
         next_image, reward, terminated, truncated, info = env.step([0.0, 0.0])
         env.render()
 
@@ -144,7 +142,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset, batch_size=settings.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=settings.batch_size, shuffle=False)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=settings.learning_rate, weight_decay=0.0005)
+    optimizer = torch.optim.Adam(model.parameters(), lr=settings.learning_rate)
     criterion = nn.MSELoss()
 
     for epoch in range(settings.epochs):
